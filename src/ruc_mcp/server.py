@@ -22,9 +22,7 @@ mcp: fastmcp.FastMCP = fastmcp.FastMCP(
         "function. "
         "\n\n"
         "Prefer RUC for tasks where the semantic question is fuzzy, but the execution "
-        "must be exact. Do not use RUC for simple one-off questions, ordinary chat, "
-        "or tasks that are purely semantic with no need for reliable procedural "
-        "execution."
+        "must be exact."
     ),
 )
 
