@@ -12,7 +12,7 @@ The result is a system that can do LLM-shaped work with the control, structure, 
 
 `ruc-mcp` is currently in the concept/prototype stage.
 
-The intended direction is an MCP server that helps LLM agents decompose plain-English tasks into reliable procedural workflows, while preserving controlled LLM calls at the exact points where semantic judgment is needed.
+The intended direction is still an MCP server that helps LLM agents separate semantic judgment from reliable procedural workflows, but the repository intentionally exposes only a minimal scaffold until that design is ready.
 
 ## Core idea
 
@@ -22,25 +22,6 @@ Render Unto Caesar is built around a simple split:
 - **LLMs handle** classification, summarization, ambiguity resolution, fuzzy matching, and other semantic decisions.
 
 The important part is not merely that both are available. The important part is that RUC defines the boundary between them, so procedural code and LLM judgment can safely interoperate inside one workflow.
-
-## Early design direction
-
-The first proof of concept will likely focus on AI-authored Python workflows with explicitly marked LLM decision points.
-
-For example, a generated workflow may contain a structured TODO annotation such as:
-
-```python
-# TODO(implement_with_llm: classify_feedback_tone)
-# input:
-#   feedback_text: str
-# output:
-#   tone: Literal["angry", "frustrated", "neutral", "positive", "unknown"]
-# instructions:
-#   Classify the customer's tone based on the feedback text.
-tone = classify_feedback_tone(feedback_text)
-```
-
-RUC can then transform that semantic hole into a controlled LLM call, while leaving the surrounding workflow logic in ordinary Python.
 
 ## Why this matters
 
@@ -53,12 +34,12 @@ RUC exists to let the LLM serve as the interface and semantic engine, while givi
 
 ## Status
 
-This repository currently contains a bare-bones scaffold only. Core functionality is intentionally left as TODOs.
+This repository currently contains a bare-bones scaffold only. It is intentionally limited to a minimal FastMCP server surface while the product shape is still being worked out.
 
 ## Scaffold layout
 
-- `src/ruc_mcp/server.py`: `RucMcpServer` skeleton and TODO method stubs.
-- `tests/test_server.py`: scaffold tests that verify placeholders and explicit TODO behavior.
+- `src/ruc_mcp/server.py`: minimal FastMCP server scaffold with a single example tool.
+- `tests/test_server.py`: tests that verify the intentionally small public surface.
 
 ## Run tests
 
