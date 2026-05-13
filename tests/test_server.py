@@ -2,9 +2,10 @@
 
 import unittest
 
+import anyio
 import fastmcp
 
-from src.ruc_mcp.server import RucMcpServer, classify_request, execute_procedural_plan, hello_world, mcp
+from src.ruc_mcp.server import RucMcpServer, hello_world, mcp
 
 
 class RucMcpServerDescribeTests(unittest.TestCase):
@@ -23,6 +24,18 @@ class FastMcpInstanceTests(unittest.TestCase):
     def test_mcp_name(self) -> None:
         self.assertEqual(mcp.name, "ruc-mcp")
 
+    def test_only_hello_world_tool_is_registered(self) -> None:
+        async def get_tool_names() -> list[str]:
+            return [tool.name for tool in await mcp.list_tools()]
+
+        self.assertEqual(anyio.run(get_tool_names), ["hello_world"])
+
+    def test_no_prompts_are_registered(self) -> None:
+        async def get_prompt_names() -> list[str]:
+            return [prompt.name for prompt in await mcp.list_prompts()]
+
+        self.assertEqual(anyio.run(get_prompt_names), [])
+
 
 class HelloWorldToolTests(unittest.TestCase):
     def test_hello_world_default(self) -> None:
@@ -32,49 +45,6 @@ class HelloWorldToolTests(unittest.TestCase):
     def test_hello_world_custom_name(self) -> None:
         result = hello_world(name="Caesar")
         self.assertEqual(result, "Hello, Caesar!")
-
-
-class ClassifyRequestToolTests(unittest.TestCase):
-    def test_returns_dict_with_expected_keys(self) -> None:
-        result = classify_request("review support tickets")
-        self.assertIn("request_text", result)
-        self.assertIn("llm_steps", result)
-        self.assertIn("procedural_steps", result)
-
-    def test_echoes_request_text(self) -> None:
-        result = classify_request("compare contracts")
-        self.assertEqual(result["request_text"], "compare contracts")
-
-
-class ExecuteProceduralPlanToolTests(unittest.TestCase):
-    def test_returns_ok_status(self) -> None:
-        result = execute_procedural_plan(["step one", "step two"])
-        self.assertEqual(result["status"], "ok")
-
-    def test_echoes_steps_as_completed(self) -> None:
-        steps = ["step one", "step two"]
-        result = execute_procedural_plan(steps)
-        self.assertEqual(result["completed_steps"], steps)
-
-
-class RucMcpServerDelegationTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.server = RucMcpServer()
-
-    def test_classify_request_returns_dict(self) -> None:
-        result = self.server.classify_request("clean a spreadsheet")
-        self.assertIsInstance(result, dict)
-        self.assertEqual(result["request_text"], "clean a spreadsheet")
-
-    def test_execute_procedural_plan_returns_dict(self) -> None:
-        result = self.server.execute_procedural_plan({"steps": ["a", "b"]})
-        self.assertIsInstance(result, dict)
-        self.assertEqual(result["status"], "ok")
-        self.assertEqual(result["completed_steps"], ["a", "b"])
-
-    def test_execute_procedural_plan_empty_steps(self) -> None:
-        result = self.server.execute_procedural_plan({"steps": []})
-        self.assertEqual(result["completed_steps"], [])
 
 
 if __name__ == "__main__":
