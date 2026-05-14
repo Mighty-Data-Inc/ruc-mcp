@@ -12,7 +12,6 @@ import fastmcp
 from src.ruc_mcp.server import (
     _load_data_from_uri,
     ruc_execute_semantic_code_workflow,
-    ruc_hello_world,
     main,
     mcp,
 )
@@ -43,7 +42,7 @@ class FastMcpInstanceTests(unittest.TestCase):
 
         self.assertEqual(
             asyncio.run(get_tool_names()),
-            sorted(["ruc_hello_world", "ruc_execute_semantic_code_workflow"]),
+            sorted(["ruc_execute_semantic_code_workflow"]),
         )
 
     def test_no_prompts_are_registered(self) -> None:
@@ -51,16 +50,6 @@ class FastMcpInstanceTests(unittest.TestCase):
             return [prompt.name for prompt in await mcp.list_prompts()]
 
         self.assertEqual(asyncio.run(get_prompt_names()), [])
-
-
-class HelloWorldToolTests(unittest.TestCase):
-    def test_hello_world_default(self) -> None:
-        result = ruc_hello_world()
-        self.assertEqual(result, "Hello, World!")
-
-    def test_hello_world_custom_name(self) -> None:
-        result = ruc_hello_world(name="Caesar")
-        self.assertEqual(result, "Hello, Caesar!")
 
 
 class ExecuteSemanticCodeWorkflowToolTests(unittest.TestCase):
@@ -75,7 +64,7 @@ class ExecuteSemanticCodeWorkflowToolTests(unittest.TestCase):
             )
         )
 
-        records = asyncio.run(_load_data_from_uri(sample_csv_uri, mock_ctx))
+        records = asyncio.run(_load_data_from_uri(mock_ctx, sample_csv_uri))
 
         self.assertGreater(len(records), 0)
         self.assertIsInstance(records[0], dict)
@@ -132,7 +121,7 @@ class ExecuteSemanticCodeWorkflowToolTests(unittest.TestCase):
         self.assertEqual(
             result["execution_notes"], "(no notes recorded during execution)"
         )
-        load_data.assert_awaited_once_with(sample_csv_uri, mock_ctx)
+        load_data.assert_awaited_once_with(mock_ctx, sample_csv_uri)
 
     def test_records_datasource_load_failure_in_execution_notes(self) -> None:
         sample_csv_uri = (
