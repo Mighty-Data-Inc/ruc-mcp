@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import unittest
+from typing import cast
 from unittest.mock import patch
 from pathlib import Path
 
@@ -25,6 +26,9 @@ class FastMcpInstanceTests(unittest.TestCase):
 
     def test_mcp_instructions(self) -> None:
         instructions = mcp.instructions
+        self.assertIsNotNone(instructions)
+
+        instructions = f"{instructions}"  # Cast to str to suppress Pylance errors.
 
         self.assertIn("deterministic procedural work", instructions)
         self.assertIn("semantic interpretation", instructions)
