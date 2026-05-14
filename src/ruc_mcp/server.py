@@ -84,7 +84,13 @@ async def _load_data_from_uri(uri: str, ctx: fastmcp.Context) -> list[dict[str, 
     parsed_uri = urlparse(uri)
     if parsed_uri.scheme != "file":
         logger.error("Unsupported URI scheme in %s", uri)
-        raise ValueError(f"Unsupported URI scheme in {uri}")
+        raise ValueError(
+            f"Unsupported URI scheme in {uri}\n"
+            "Currently only file URIs with absolute paths are supported "
+            "(e.g. file:///C:/path/to/file.csv). If your data source is not a file, "
+            "please download or export it to a file and try again, "
+            "providing a file URI pointing to it."
+        )
 
     data_str = ""
 
