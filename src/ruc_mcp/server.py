@@ -6,6 +6,8 @@ import logging
 import os
 from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import unquote, urlparse
+from urllib.request import url2pathname
 
 import fastmcp
 from pydantic import Field
@@ -61,24 +63,36 @@ def _load_data_from_uri(uri: str) -> list[dict[str, Any]]:
     logger = logging.getLogger(__name__)
     logger.info("Loading data from URI: %s", uri)
 
-    if uri.startswith("file://"):
-        file_path = uri[len("file://") :]
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                # For simplicity, let's assume it's a CSV file and parse it accordingly.
-                # In a real implementation, you'd want to handle different formats and edge cases.
-                import csv
-
-                reader = csv.DictReader(f)
-                records = [row for row in reader]
-                logger.info("Loaded %d records from %s", len(records), uri)
-                return records
-        except Exception as e:
-            logger.error("Failed to load data from %s: %s", uri, e)
-            raise ValueError(f"Could not load data from {uri}: {e}")
-    else:
+    parsed_uri = urlparse(uri)
+    if parsed_uri.scheme != "file":
         logger.error("Unsupported URI scheme in %s", uri)
         raise ValueError(f"Unsupported URI scheme in {uri}")
+
+    try:
+        # Canonical Windows URI: file:///C:/path/to/file.csv
+        # Also preserves compatibility with file://C:/path style during transition.
+        if parsed_uri.netloc and parsed_uri.netloc != "localhost":
+            if len(parsed_uri.netloc) == 2 and parsed_uri.netloc[1] == ":":
+                file_uri_path = f"/{parsed_uri.netloc}{parsed_uri.path}"
+            else:
+                file_uri_path = f"//{parsed_uri.netloc}{parsed_uri.path}"
+        else:
+            file_uri_path = parsed_uri.path
+
+        file_path = Path(url2pathname(unquote(file_uri_path)))
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            # For simplicity, let's assume it's a CSV file and parse it accordingly.
+            # In a real implementation, you'd want to handle different formats and edge cases.
+            import csv
+
+            reader = csv.DictReader(f)
+            records = [row for row in reader]
+            logger.info("Loaded %d records from %s", len(records), uri)
+            return records
+    except Exception as e:
+        logger.error("Failed to load data from %s: %s", uri, e)
+        raise ValueError(f"Could not load data from {uri}: {e}")
 
 
 @mcp.tool()
@@ -127,7 +141,7 @@ def ruc_execute_semantic_code_workflow(
                 "of records, such as a CSV file, a JSON file with a list of objects, a "
                 "SQL dump of a database table, etc. "
                 "Currently only accepts file URIs with absolute paths, "
-                "e.g. `file:///c/users/mvol/Documents/client_list.csv`"
+                "e.g. `file:///C:/Users/mvol/Documents/client_list.csv`"
             )
         ),
     ] = None,

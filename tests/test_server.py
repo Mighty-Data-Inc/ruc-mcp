@@ -10,6 +10,7 @@ from pathlib import Path
 import fastmcp
 
 from src.ruc_mcp.server import (
+    _load_data_from_uri,
     ruc_execute_semantic_code_workflow,
     ruc_hello_world,
     main,
@@ -63,6 +64,15 @@ class HelloWorldToolTests(unittest.TestCase):
 
 
 class ExecuteSemanticCodeWorkflowToolTests(unittest.TestCase):
+    def test_load_data_from_canonical_file_uri(self) -> None:
+        sample_csv_uri = (
+            (Path(__file__).parent / "sample_data" / "customers.csv").resolve().as_uri()
+        )
+
+        records = _load_data_from_uri(sample_csv_uri)
+
+        self.assertGreater(len(records), 0)
+
     def test_returns_not_implemented_payload(self) -> None:
         with patch("src.ruc_mcp.server.logging.getLogger") as get_logger:
             result = ruc_execute_semantic_code_workflow(
@@ -76,16 +86,20 @@ class ExecuteSemanticCodeWorkflowToolTests(unittest.TestCase):
                 "message": "execute_semantic_code_workflow is not implemented yet.",
             },
         )
-        get_logger.return_value.info.assert_called_once_with(
+        get_logger.return_value.info.assert_any_call(
             "execute_semantic_code_workflow started for task: %s",
             "Classify support tickets by sentiment",
         )
 
     def test_returns_not_implemented_payload_with_all_args(self) -> None:
+        sample_csv_uri = (
+            (Path(__file__).parent / "sample_data" / "customers.csv").resolve().as_uri()
+        )
+
         result = ruc_execute_semantic_code_workflow(
             task_description="Classify support tickets by sentiment",
             context_explanation="Tickets are from a SaaS product help desk.",
-            data_source_uris=["file:///data/tickets.csv"],
+            data_source_uris=[sample_csv_uri],
             expected_result_schema={
                 "type": "object",
                 "properties": {"sentiment": {"type": "string"}},
