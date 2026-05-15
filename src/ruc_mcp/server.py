@@ -502,11 +502,12 @@ Before we get started, discuss the following matters:
 Discuss these matters. Take as much time or verbiage as you need; these are important to
 get right.
 
-Then, at the end of your discussion, answer one chief salient quesion: Are you good to go?
-Right now, unconditionally, without any further input, would you be able to write and
-execute `execute_workflow` ? At the end of your response, write either "GOOD_TO_GO: YES",
-just like that, on its own line, in all caps -- or else "GOOD_TO_GO: NO. ", followed by an
-explanation of why not.
+Then, at the end of your discussion, answer one chief salient quesion: 
+If I were to paste in the implementations of the stub functions, then would you be good to go?
+Right now, unconditionally (assuming stub function flesh-out), without any further input... 
+Would you be able to write and execute `execute_workflow`?
+At the end of your response, write either "GOOD_TO_GO: YES", just like that, on its own line, 
+in all caps -- or else "GOOD_TO_GO: NO. ", followed by an explanation of why not.
 """)
 
     sample_result = await ctx.sample(
@@ -951,11 +952,15 @@ async def ruc_execute_semantic_code_workflow(
     logger.info(f"Generated workflow code:\n{pycode}")
 
     logger.info(f"Running workflow code now. This may take a moment...")
+    # DEBUG: Save pycode to a local file, so we can inspect it if anything goes wrong during execution.
+    with open("temp_auto_generated_workflow.py", "w", encoding="utf-8") as f:
+        f.write(pycode)
 
     try:
         runresult = await _execute_workflow_code(ctx, pycode, data_source_records)
         logger.info(f"Workflow execution result: {runresult}")
     except Exception as e:
+        logger.error(f"Workflow execution failed: {e}", exc_info=True)
         return {
             "status": "error",
             "message": "Workflow execution failed.",
