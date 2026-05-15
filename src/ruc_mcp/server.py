@@ -401,7 +401,8 @@ and will copy-paste it into an execution environment.
             pycode = _extract_python_code_block(sample_result.text)
             if not pycode:
                 raise ValueError(
-                    "Failed to extract Python code block when trying to write initial workflow code."
+                    "Failed to extract Python code block when trying to write "
+                    "initial workflow code."
                 )
 
             # Let's clean up the code just a tiny bit.
@@ -416,7 +417,8 @@ and will copy-paste it into an execution environment.
             # force a retry if it's there.
             if "__future__" in pycode:
                 raise ValueError(
-                    "The LLM included a __future__ import, which is forbidden in the system prompt."
+                    "The LLM included a __future__ import, which is forbidden in the "
+                    "system prompt."
                 )
 
             pycode = "import fastmcp\nimport pydantic\n\n" + pycode
