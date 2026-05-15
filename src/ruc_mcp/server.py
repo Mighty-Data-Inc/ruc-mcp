@@ -408,7 +408,8 @@ and will copy-paste it into an execution environment.
             # Let's clean up the code just a tiny bit.
             pycode = pycode.strip()
 
-            # We need to make sure that it calls `import fastmcp` and `import pydantic`.
+            # We need to make sure that it calls a few imports that will be necessary
+            # for implementing the stubs.
             # Fortunately, Python allows multiple import statements for the same package, so we
             # don't need to check if they're already imported.
             # The only snag in this plan is that __future__ imports must be at the very top of
@@ -421,7 +422,7 @@ and will copy-paste it into an execution environment.
                     "system prompt."
                 )
 
-            pycode = "import fastmcp\nimport pydantic\n\n" + pycode
+            pycode = "import fastmcp\nimport json\nimport pydantic\n\n" + pycode
 
             return pycode
         except Exception as e:
@@ -573,7 +574,6 @@ async def _replace_all_stubs_with_implementations(
     convo = json.loads(json.dumps(convo))  # Deep-copy to ensure mutability.
 
     logger.info("Looking for stub functions to implement in the generated code.")
-    logger.info(json.dumps(convo, indent=2))
 
     # We marked these stub functions with a special syntax in the TODO comment, so we can grep for them.
     # The syntax is "TODO(llm_stub: stub_function_name): description of what the function should do".
@@ -764,7 +764,7 @@ async def ruc_execute_semantic_code_workflow(
     # of this POC is to demonstrate the code generation aspect of RUC. The production version of
     # this function will need to execute the generated code in a sandboxed environment and return
     # the actual results of that execution.
-    logger.info("Generated workflow code:\n%s", pycode)
+    logger.info(f"Generated workflow code:\n{pycode}")
 
     return {
         "status": "not_implemented",
