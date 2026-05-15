@@ -44,6 +44,40 @@ mcp: fastmcp.FastMCP = fastmcp.FastMCP(
     ),
 )
 
+RUC_FUNCTION_WRITING_SYSTEM_PROMPT = """
+In today's work session, you'll write a Python function called `execute_workflow`.
+It will adhere to the following calling convention and structure:
+
+```python
+def execute_workflow(data_source_records: dict[str, list[Any]]):
+    # TODO: Implement the task here
+    # ...
+    # value of "result" can be any list or dict, as long as it's JSON serializable
+    return {"result": ...}
+```
+
+The Python environment you'll be running in is a default Python 3.11 install.
+You can import default packages like `json` or `csv`, but you don't have access to
+fancy advanced tools like dataframes. Also, it's running in a restricted environment,
+so you can't access the network or the filesystem (not that you should need such things
+for a data restructuring operation). 
+
+You may, of course, write whatever support or helper functions you might need.
+
+In an ideal world, you should be able to implement the entire task using only conventional code,
+possibly with the help of heuristic tricks involving regexes or string operations where necessary.
+However, in practice, some portion (or multiple portions) of this task might require judgment
+calls, inference, reconciliation of noisy or ambiguous information, and other tasks that are
+more suitable to an LLM than to a Python function.
+
+If you come across such operational requirements, then here's what I want you to do:
+Invent ad-hoc functions on the fly that would hypothetically send an LLM call.
+Each such function should take a single JSON-serializable object as an argument
+(call it just "arg"), and will produce some kind of simple structured output as a reply.
+Whenever you invent such an ad-hoc function, write a placeholder stub for it, and 
+describe in a TODO statement what you'd imagine that the function will do. 
+"""
+
 
 def configure_logging() -> None:
     """Write runtime logs to a fresh file on each launch and echo to stderr."""
@@ -200,7 +234,9 @@ triple-backtick delimiter.
 
             error_stage = "sampling_response"
             if not sample_result.text:
-                raise ValueError("Sampling returned no text to execute.")
+                raise ValueError(
+                    f"Sampling returned no text to execute when trying to parse data from {uri}."
+                )
 
             convo.append(
                 SamplingMessage(
@@ -304,6 +340,82 @@ async def _write_workflow(ctx: fastmcp.Context, convo: list[str]):
     """Write a Python function that performs a procedural workflow that includes
     "fuzzy" operations."""
     logger = logging.getLogger(__name__)
+    convo = json.loads(json.dumps(convo))  # Deep-copy to ensure mutability.
+    return "NOT IMPLEMENTED YET"
+
+
+async def _is_ready_for_workflow(ctx: fastmcp.Context, convo: list[str]):
+    """Sanity-checks to see if we have enough information to proceed with writing a workflow."""
+    logger = logging.getLogger(__name__)
+    convo = json.loads(json.dumps(convo))  # Deep-copy to ensure mutability.
+
+    convo.append("""
+Before we get started, discuss the following matters:
+
+- Is the task clear? Do you understand what you're being asked to do?
+
+- Do you have all of the data sources that the task seems to need?
+
+- For each data source, what's the *shape* or *structure* of the data? 
+    Is the data something you can work with? (Note that I'm not asking you to make up what
+    you think the shape or structure *should* be. I'm asking you to describe what you see.
+    If there's a discrepancy between what you see and what you would expect, say so.)
+
+- For each data source, look at the preview/snapshot. Do you see any lurking anomalies or
+    inconsistencies that you'll have to code around? Basically, anything that might bite you
+    in the ass once the code is running?
+
+Discuss these matters. Take as much time or verbiage as you need; these are important to
+get right.
+
+Then, at the end of your discussion, answer one chief salient quesion: Are you good to go?
+Right now, unconditionally, without any further input, would you be able to write and
+execute `execute_workflow` ? At the end of your response, write either "GOOD_TO_GO: YES",
+just like that, on its own line, in all caps -- or else "GOOD_TO_GO: NO. ", followed by an
+explanation of why not.
+""")
+
+    sample_result = await ctx.sample(
+        messages=convo,
+        system_prompt=RUC_FUNCTION_WRITING_SYSTEM_PROMPT,
+        max_tokens=20_000,
+    )
+
+    if not sample_result.text:
+        raise ValueError(
+            "Sampling returned no text when sanity-checking whether or not we "
+            "have enough information to proceed with writing a workflow."
+        )
+
+    # Grep sample_result for "GOOD_TO_GO: YES". If it's there, we can exit.
+    if "GOOD_TO_GO: YES" in sample_result.text:
+        # Returning no value is a signal to proceed!
+        return
+
+    # If we get here, the model is saying "GOOD_TO_GO: NO". We should raise an
+    # error with the model's explanation of why not, which should be in the text
+    # after "GOOD_TO_GO: NO".
+    if "GOOD_TO_GO: NO" not in sample_result.text:
+        raise ValueError(
+            "When we asked the model to sanity-check whether or not we have enough "
+            "information to proceed with writing a workflow, "
+            "it gave us neither a clear YES nor a clear NO."
+        )
+
+    good_to_go_split = sample_result.text.split("GOOD_TO_GO: NO", 1)
+    explanation = (
+        good_to_go_split[1].strip()
+        if len(good_to_go_split) > 1
+        else (
+            "When we asked the model to sanity-check whether or not we have enough information "
+            "to proceed with writing a workflow, it said NO but did not provide an explanation."
+        )
+    )
+    raise ValueError(
+        "When we asked the model to sanity-check whether or not we have enough information to "
+        "proceed with writing a workflow, it said NO. Explanation: "
+        f"{explanation}"
+    )
 
 
 @mcp.tool(
@@ -444,6 +556,21 @@ async def ruc_execute_semantic_code_workflow(
             "and that data is missing, then that's almost certainly an error on the part of "
             "either the end user or the AI agent that dispatched you."
         )
+
+    try:
+        await _is_ready_for_workflow(ctx, convo)
+    except Exception as e:
+        note = f"Model indicated it was not ready to write workflow code: {e}"
+        logger.warning(note)
+        execution_notes += f"{note}\n\n"
+        # If the model says it's not ready, we should stop here and return an error message to the user.
+        return {
+            "status": "error",
+            "message": "Model indicated it was not ready to write workflow code.",
+            "details": str(e),
+            "execution_notes": execution_notes.strip()
+            or "(no notes recorded during execution)",
+        }
 
     pycode = await _write_workflow(ctx, convo)
 
