@@ -1,7 +1,5 @@
 """Render Unto Caesar MCP server built with FastMCP."""
 
-from __future__ import annotations
-
 import json
 import logging
 import os
@@ -57,9 +55,10 @@ async def execute_workflow(data_source_records: dict[str, list[Any]], ctx: fastm
 
 The Python environment you'll be running in is a default Python 3.11 install.
 You can import default packages like `json` or `csv`, but you don't have access to fancy
-advanced tools like dataframes. Also, it's running in a restricted environment, so you
-can't access the network or the filesystem (not that you should need such things for a
-data restructuring operation). 
+advanced tools like dataframes. Likewise, the __future__ library in your environment
+is extremely flakey and unreliable, and must be avoided (not that you should need it anyway).
+Also, it'll be running in a restricted VM, so you can't access the network or the filesystem
+-- again, not that you should need such things for a data restructuring operation. 
 
 The one exception is that this environment *does* have a library called FastMCP installed,
 so you can `import fastmcp` and declare `ctx: fastmcp.Context` in your type signature.
@@ -385,24 +384,57 @@ enclosed in triple-backticks, i.e. as "```python". Later, I'll look for this blo
 and will copy-paste it into an execution environment.
 """)
 
-    sample_result = await ctx.sample(
-        messages=convo,
-        system_prompt=RUC_FUNCTION_WRITING_SYSTEM_PROMPT,
-        max_tokens=60_000,
+    MAX_ATTEMPTS = 5
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            sample_result = await ctx.sample(
+                messages=convo,
+                system_prompt=RUC_FUNCTION_WRITING_SYSTEM_PROMPT,
+                max_tokens=60_000,
+            )
+
+            if not sample_result.text:
+                raise ValueError(
+                    "Sampling returned no text when trying to write the initial workflow code."
+                )
+
+            pycode = _extract_python_code_block(sample_result.text)
+            if not pycode:
+                raise ValueError(
+                    "Failed to extract Python code block when trying to write initial workflow code."
+                )
+
+            # Let's clean up the code just a tiny bit.
+            pycode = pycode.strip()
+
+            # We need to make sure that it calls `import fastmcp` and `import pydantic`.
+            # Fortunately, Python allows multiple import statements for the same package, so we
+            # don't need to check if they're already imported.
+            # The only snag in this plan is that __future__ imports must be at the very top of
+            # the file -- but we forbid the use of __future__ imports in the system prompt,
+            # so we should be in the clear. Just in case, let's check for __future__ and
+            # force a retry if it's there.
+            if "__future__" in pycode:
+                raise ValueError(
+                    "The LLM included a __future__ import, which is forbidden in the system prompt."
+                )
+
+            pycode = "import fastmcp\nimport pydantic\n\n" + pycode
+
+            return pycode
+        except Exception as e:
+            logger.warning(
+                "Attempt %d/%d failed while writing workflow code: %s",
+                attempt,
+                MAX_ATTEMPTS,
+                e,
+            )
+
+    raise ValueError(
+        f"RUC failed to write any initial workflow code after {MAX_ATTEMPTS} attempts. "
+        "There is probably something wrong with RUC's code generator prompt, or with the "
+        "model it's calling."
     )
-
-    if not sample_result.text:
-        raise ValueError(
-            "Sampling returned no text when trying to write the initial workflow code."
-        )
-
-    pycode = _extract_python_code_block(sample_result.text)
-    if not pycode:
-        raise ValueError(
-            "Failed to extract Python code block when trying to write the initial workflow code."
-        )
-
-    return pycode
 
 
 async def _is_ready_for_workflow(ctx: fastmcp.Context, convo: list[str]):
@@ -560,6 +592,8 @@ async def _replace_all_stubs_with_implementations(
         #     pycode,
         # )
 
+    return pycode
+
 
 @mcp.tool(
     description=(
@@ -616,7 +650,7 @@ async def ruc_execute_semantic_code_workflow(
         list[str] | None,
         Field(
             description=(
-                "Optional non-negotiable requirements the workflow must obey, and which might "
+                "Optional list of requirements the workflow must obey, and which might "
                 "not be immediately obvious from the task description. Use this to specify "
                 'hard constraints or stipulations, such as "Don\'t process repeated records", '
                 'or "Scrub personally identifiable information from the output", or '
@@ -633,6 +667,7 @@ async def ruc_execute_semantic_code_workflow(
             )
         ),
     ] = None,
+    # TODO: Possibly also give it a place to write the output file.
 ) -> dict[str, Any]:
     """Perform a RUC task."""
     logger = logging.getLogger(__name__)
@@ -652,7 +687,7 @@ async def ruc_execute_semantic_code_workflow(
             logger.warning(note)
             execution_notes += f"{note}\n\n"
 
-    logger.info("Data loading complete. Starting main workflow execution.")
+    logger.info("Data loading complete. Entering main workflow authorship.")
 
     data_previews = _construct_data_source_previews(data_source_records)
 
@@ -714,6 +749,10 @@ async def ruc_execute_semantic_code_workflow(
             "execution_notes": execution_notes.strip()
             or "(no notes recorded during execution)",
         }
+
+    logger.info(
+        "Model indicated it is ready to write workflow code. Proceeding to code generation."
+    )
 
     pycode = await _write_workflow(ctx, convo)
 
