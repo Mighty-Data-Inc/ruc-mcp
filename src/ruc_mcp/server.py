@@ -462,6 +462,69 @@ explanation of why not.
     )
 
 
+async def _replace_stub_with_implementation(
+    ctx: fastmcp.Context,
+    stubname: str,
+    pycode: str,
+    convo: list[str],
+) -> str:
+    """Replace the given stub function with a real implementation."""
+    logger = logging.getLogger(__name__)
+    convo = json.loads(json.dumps(convo))  # Deep-copy to ensure mutability.
+
+    logger.info("Asking model to implement stub function %s", stubname)
+
+    convo.append(f"""
+Oh shoot, I'm so sorry -- I hit the delete button by accident and deleted your entire response.
+I lost your whole reasoning process and self-discussion. From your POV, the conversation probably
+has a major discontinuity. I apologize for the confusion.
+
+But that's okay, because I had copy-pasted the code you wrote.
+
+I was just in the process of filling in those stub functions. If you see any functions marked
+`_obsolete_stub`, that's me -- that's my way of checking off the stubs I've completed as I go
+(marking for deletion later). (If you don't see any `_obsolete_stub` functions, then that's
+probably because I haven't gotten to any of them yet.)
+
+Check it out.
+
+```python
+{pycode}
+```
+""")
+    # TODO: Left off coding here.
+    return pycode
+
+
+async def _replace_all_stubs_with_implementations(
+    ctx: fastmcp.Context,
+    pycode: str,
+    convo: list[str],
+):
+    """Find any stub functions in the given code, and replace them with real implementations."""
+    logger = logging.getLogger(__name__)
+    convo = json.loads(json.dumps(convo))  # Deep-copy to ensure mutability.
+
+    # We marked these stub functions with a special syntax in the TODO comment, so we can grep for them.
+    # The syntax is "TODO(llm_stub: stub_function_name): description of what the function should do".
+    stub_pattern = re.compile(r"TODO\(llm_stub:\s*(\w+)\):\s*(.*?)\n")
+    stubs = stub_pattern.findall(pycode)
+    logger.info("Found %d stub functions to implement: %s", len(stubs), stubs)
+
+    for stubname, stubdescription in stubs:
+        pycode = await _replace_stub_with_implementation(ctx, stubname, pycode, convo)
+
+        # NOTE: This goes in _replace_stub_with_implementation
+        # After we get the implementation for this stub, we should replace the stub definition in pycode with the new implementation,
+        # so that the next time we ask for an implementation of another stub, the model can see the implementations we've done so far.
+        # For simplicity, we'll just mark the old stub definition as obsolete by renaming it to _obsolete_stubname.
+        # pycode = re.sub(
+        #     rf"def\s+{stubname}\s*\(",
+        #     f"def _obsolete_{stubname}(",
+        #     pycode,
+        # )
+
+
 @mcp.tool(
     description=(
         "Perform a task that mixes deterministic procedural work (primarily the "
@@ -617,6 +680,8 @@ async def ruc_execute_semantic_code_workflow(
         }
 
     pycode = await _write_workflow(ctx, convo)
+
+    pycode = await _replace_all_stubs_with_implementations(ctx, pycode, convo)
 
     # For now, just log the generated code and return a placeholder response, since the main point
     # of this POC is to demonstrate the code generation aspect of RUC. The production version of
