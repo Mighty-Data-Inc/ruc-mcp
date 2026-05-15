@@ -1,6 +1,7 @@
 """Render Unto Caesar MCP server built with FastMCP."""
 
 import json
+import inspect
 import logging
 import os
 from pathlib import Path
@@ -745,6 +746,36 @@ async def _replace_all_stubs_with_implementations(
     return pycode
 
 
+async def _execute_workflow_code(
+    ctx: fastmcp.Context,
+    pycode: str,
+    data_source_records: dict[str, Any],
+) -> Any:
+    """Execute the given workflow code and return the result."""
+    logger = logging.getLogger(__name__)
+    logger.info("Executing workflow code.")
+
+    namespace: dict[str, Any] = {}
+    exec(pycode, namespace, namespace)
+
+    execute_workflow = namespace.get("execute_workflow")
+    if not callable(execute_workflow):
+        raise ValueError(
+            "Generated code did not define callable execute_workflow(data_source_records, ctx)."
+        )
+
+    # The function execute_workflow takes an argument called "data_source_records".
+    # Pass it in.
+    workflow_result = execute_workflow(data_source_records=data_source_records, ctx=ctx)
+    result = (
+        await cast(Any, workflow_result)
+        if inspect.isawaitable(workflow_result)
+        else workflow_result
+    )
+    logger.info("Workflow execution complete.")
+    return result
+
+
 @mcp.tool(
     description=(
         "Perform a task that mixes deterministic procedural work (primarily the "
@@ -919,9 +950,14 @@ async def ruc_execute_semantic_code_workflow(
     # the actual results of that execution.
     logger.info(f"Generated workflow code:\n{pycode}")
 
+    logger.info(f"Running workflow code now. This may take a moment...")
+
+    runresult = await _execute_workflow_code(ctx, pycode, data_source_records)
+    logger.info(f"Workflow execution result: {runresult}")
+
     return {
-        "status": "not_implemented",
-        "message": "execute_semantic_code_workflow is not implemented yet.",
+        "status": "success",
+        "result": json.dumps(runresult, indent=2, default=str),
         "execution_notes": execution_notes.strip()
         or "(no notes recorded during execution)",
     }
