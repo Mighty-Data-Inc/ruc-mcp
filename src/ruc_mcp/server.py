@@ -75,7 +75,20 @@ Invent ad-hoc functions on the fly that would hypothetically send an LLM call.
 Each such function should take a single JSON-serializable object as an argument
 (call it just "arg"), and will produce some kind of simple structured output as a reply.
 Whenever you invent such an ad-hoc function, write a placeholder stub for it, and 
-describe in a TODO statement what you'd imagine that the function will do. 
+describe in a TODO statement what you'd imagine that the function will do. (Make the body of the
+function throw a NotImplementedError with a message stating the function's name and explaining
+what it would do if it were in fact implemented.)
+
+In fact, to make it easier to find these stub functions later, please use a special syntax
+for the TODO statement: "TODO(llm_stub: stub_function_name): lorem ipsum dolor logit es..."
+In other words, mark the TODO with the special label "llm_stub", followed by the name of the
+function, and then a description of what the function would ask the LLM to do -- using the
+formatting exactly as shown.
+
+PRO TIP: Don't write stubs for functions that you don't plan to call. We *will* fill out their
+implementations shortly, so don't byass or avoid these stub functions simply in the interest of
+writing code that works "for now". Treat the stub functions as though they actually do indeed
+work in the here and now.
 """
 
 
@@ -341,7 +354,38 @@ async def _write_workflow(ctx: fastmcp.Context, convo: list[str]):
     "fuzzy" operations."""
     logger = logging.getLogger(__name__)
     convo = json.loads(json.dumps(convo))  # Deep-copy to ensure mutability.
-    return "NOT IMPLEMENTED YET"
+
+    convo.append("""
+You now have everything you need (or at least, everything I can give you)
+to write `execute_workflow`.
+
+This will require some thought, so don't just start coding right away.
+First, discuss a plan. Approach this with the mindset of a seasoned software engineer.
+Feel free to talk your way through state management or support systems as needed.
+
+Then, after your proverbial one-man design meeting, emit a block of Python code 
+enclosed in triple-backticks, i.e. as "```python". Later, I'll look for this block,
+and will copy-paste it into an execution environment.
+""")
+
+    sample_result = await ctx.sample(
+        messages=convo,
+        system_prompt=RUC_FUNCTION_WRITING_SYSTEM_PROMPT,
+        max_tokens=60_000,
+    )
+
+    if not sample_result.text:
+        raise ValueError(
+            "Sampling returned no text when trying to write the initial workflow code."
+        )
+
+    pycode = _extract_python_code_block(sample_result.text)
+    if not pycode:
+        raise ValueError(
+            "Failed to extract Python code block when trying to write the initial workflow code."
+        )
+
+    return pycode
 
 
 async def _is_ready_for_workflow(ctx: fastmcp.Context, convo: list[str]):
