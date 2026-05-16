@@ -9,6 +9,7 @@ import re
 import traceback
 from typing import Annotated, Any, cast
 from urllib.parse import unquote, urlparse
+from urllib.request import Request, urlopen
 from urllib.request import url2pathname
 
 import fastmcp
@@ -290,6 +291,55 @@ def _construct_data_source_previews(
             )
         previews.append(preview_str)
     return previews
+
+
+def _send_result_to_uri(uri: str, result: Any) -> str:
+    """Write workflow results to a destination URI and return an execution note."""
+    logger = logging.getLogger(__name__)
+    logger.info("Sending workflow result to URI: %s", uri)
+
+    parsed_uri = urlparse(uri)
+    if parsed_uri.scheme == "file":
+        # Canonical Windows URI: file:///C:/path/to/output.json
+        # Also preserves compatibility with file://C:/path style during transition.
+        if parsed_uri.netloc and parsed_uri.netloc != "localhost":
+            if len(parsed_uri.netloc) == 2 and parsed_uri.netloc[1] == ":":
+                file_uri_path = f"/{parsed_uri.netloc}{parsed_uri.path}"
+            else:
+                file_uri_path = f"//{parsed_uri.netloc}{parsed_uri.path}"
+        else:
+            file_uri_path = parsed_uri.path
+
+        file_path = Path(url2pathname(unquote(file_uri_path)))
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
+
+        logger.info("Workflow result written to %s", file_path)
+        return f"Wrote workflow result to {uri}.\n\n"
+
+    if parsed_uri.scheme in ("http", "https"):
+        payload = json.dumps(result, ensure_ascii=False).encode("utf-8")
+        request = Request(
+            uri,
+            data=payload,
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            method="POST",
+        )
+        with urlopen(request, timeout=30) as response:
+            status_code = response.status
+
+        if 200 <= status_code < 300:
+            logger.info("Workflow result posted to %s with status %s", uri, status_code)
+            return f"Posted workflow result to {uri} (HTTP {status_code}).\n\n"
+
+        raise ValueError(
+            f"Failed to post workflow result to {uri}: HTTP status {status_code}."
+        )
+
+    raise ValueError(
+        f"Unsupported URI scheme in {uri}. Supported schemes are file, http, and https."
+    )
 
 
 async def _load_data_from_uri(ctx: fastmcp.Context, uri: str) -> list[dict[str, Any]]:
@@ -954,7 +1004,25 @@ async def ruc_execute_semantic_code_workflow(
             )
         ),
     ] = None,
-    # TODO: Possibly also give it a place to write the output file.
+    result_uri: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Optional destination to which to write bulk results. For most tasks, writing your "
+                "output to a file will be more practical than returning a huge JSON blob. "
+                "If this field isn't provided, RUC will just present the results directly to the "
+                "agent LLM that called it. This is a bad idea for large results, because the "
+                "LLM then has to load the entire result into its context window just to read it, "
+                "which is inefficient, unreliable, and probably defeats the purpose of using RUC "
+                "in the first place. So if your task is producing a large result, it's best to "
+                "provide a URI here to write it to. "
+                "If the URI is a file URI, RUC will write the result to the given file. "
+                "If the URI is an HTTP endpoint, RUC will POST the result to that endpoint as JSON. "
+                "Currently only accepts file URIs with absolute paths, "
+                "e.g. `file:///C:/Users/mvol/Documents/client_list.csv`"
+            )
+        ),
+    ] = None,
 ) -> dict[str, Any]:
     """Perform a RUC task."""
     logger = logging.getLogger(__name__)
@@ -1074,12 +1142,20 @@ async def ruc_execute_semantic_code_workflow(
             or "(no notes recorded during execution)",
         }
 
-    return {
+    # If we have a result_uri, write the result there instead of returning it directly.
+    if result_uri and len(result_uri) > 0:
+        execution_notes += _send_result_to_uri(result_uri, runresult)
+
+    retval = {
         "status": "success",
-        "result": json.dumps(runresult, indent=2, default=str),
         "execution_notes": execution_notes.strip()
         or "(no notes recorded during execution)",
     }
+    if not result_uri:
+        # If we didn't write the result to a URI, include it in the response.
+        retval["result"] = runresult
+
+    return retval
 
 
 def main() -> None:

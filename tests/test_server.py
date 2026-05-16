@@ -83,9 +83,19 @@ class ExecuteSemanticCodeWorkflowToolTests(unittest.TestCase):
         self.assertEqual(
             result,
             {
-                "status": "not_implemented",
-                "message": "execute_semantic_code_workflow is not implemented yet.",
-                "execution_notes": "(no notes recorded during execution)",
+                "status": "error",
+                "message": "Model indicated it was not ready to write workflow code.",
+                "details": (
+                    "When we asked the model to sanity-check whether or not we have "
+                    "enough information to proceed with writing a workflow, "
+                    "it gave us neither a clear YES nor a clear NO."
+                ),
+                "execution_notes": (
+                    "Model indicated it was not ready to write workflow code: "
+                    "When we asked the model to sanity-check whether or not we have "
+                    "enough information to proceed with writing a workflow, "
+                    "it gave us neither a clear YES nor a clear NO."
+                ),
             },
         )
         get_logger.return_value.info.assert_any_call(
@@ -117,9 +127,15 @@ class ExecuteSemanticCodeWorkflowToolTests(unittest.TestCase):
                 )
             )
 
-        self.assertEqual(result["status"], "not_implemented")
+        self.assertEqual(result["status"], "error")
         self.assertEqual(
-            result["execution_notes"], "(no notes recorded during execution)"
+            result["message"],
+            "Model indicated it was not ready to write workflow code.",
+        )
+        self.assertIn("gave us neither a clear YES nor a clear NO", result["details"])
+        self.assertIn(
+            "Model indicated it was not ready to write workflow code",
+            result["execution_notes"],
         )
         load_data.assert_awaited_once_with(mock_ctx, sample_csv_uri)
 
@@ -141,7 +157,12 @@ class ExecuteSemanticCodeWorkflowToolTests(unittest.TestCase):
                 )
             )
 
-        self.assertEqual(result["status"], "not_implemented")
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(
+            result["message"],
+            "Model indicated it was not ready to write workflow code.",
+        )
+        self.assertIn("gave us neither a clear YES nor a clear NO", result["details"])
         self.assertIn("Failed to load data source", result["execution_notes"])
         self.assertIn("boom", result["execution_notes"])
 
