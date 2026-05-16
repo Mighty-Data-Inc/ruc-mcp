@@ -111,6 +111,10 @@ PRO TIP: Don't write stubs for functions that you don't plan to call. We *will* 
 implementations shortly, so don't bypass or avoid these stub functions simply in the interest of
 writing code that works "for now". Treat the stub functions as though they actually do indeed
 work in the here and now.
+
+PRO TIP: Notice that the `execute_workflow` function takes a `logger` argument. Use this to report
+progress as the workflow is running. For long-running operations, it's nice to know that the
+system is still working and hasn't frozen or crashed.
 """
 
 INJECT_RUC_LLM_CALL_FUNCTION = """
