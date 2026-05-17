@@ -1147,7 +1147,7 @@ async def ruc_execute_semantic_code_workflow(
     # of this POC is to demonstrate the code generation aspect of RUC. The production version of
     # this function will need to execute the generated code in a sandboxed environment and return
     # the actual results of that execution.
-    logger.info(f"Generated workflow code:\n{pycode}")
+    logger.info(f"Generated workflow code")
 
     logger.info(f"Running workflow code now. This may take a moment...")
     # DEBUG: Save pycode to a local file, so we can inspect it if anything goes wrong during execution.
@@ -1156,7 +1156,7 @@ async def ruc_execute_semantic_code_workflow(
 
     try:
         runresult = await _execute_workflow_code(ctx, pycode, data_source_records)
-        logger.info(f"Workflow execution result: {runresult}")
+        logger.info(f"Workflow execution complete.")
     except Exception as e:
         logger.error(f"Workflow execution failed: {e}", exc_info=True)
         return {
