@@ -117,8 +117,10 @@ PRO TIP: As a courtesy to the end user, use the `ctx` object's logging and progr
 methods! RUC is often called to perform long-running operations, so it's an important courtesy
 to the user to report things like the name of the current stage of the workflow or the current
 progress through the current stage. The FastMCP Context object, `ctx`, has standard logger
-methods to facilitate this: ctx.debug, ctx.info, ctx.warning, and ctx.error. In addition, 
-it also has a method called `ctx.report_progress(progress: float, total: float)`, which shows
+methods to facilitate this: ctx.debug, ctx.info, ctx.warning, and ctx.error -- these work just
+like the standard Python logger methods, except that they're asynchronous (so, call them 
+with `await`, e.g. `await ctx.info("Hello world")`). In addition, the `ctx` object also has an
+async method called `ctx.report_progress(progress: float, total: float)`, which shows
 the user a very convenient progress bar. Use these tools often to keep the user informed
 about what's going on!
 """
@@ -359,13 +361,12 @@ def _send_result_to_uri(uri: str, file_contents: Any) -> str:
 async def _load_data_from_uri(ctx: fastmcp.Context, uri: str) -> list[dict[str, Any]]:
     """Load data from a given URI and return it as a list of records."""
     logger = logging.getLogger(__name__)
-    logger.info("Loading data from URI: %s", uri)
+    await ctx.info(f"Loading data source: {uri}")
 
     parsed_uri = urlparse(uri)
     if parsed_uri.scheme != "file":
-        logger.error("Unsupported URI scheme in %s", uri)
-        raise ValueError(
-            f"Unsupported URI scheme in {uri}\n"
+        await ctx.error(
+            f'Unsupported URI scheme "{parsed_uri.scheme}" in {uri}\n'
             "Currently only file URIs with absolute paths are supported "
             "(e.g. file:///C:/path/to/file.csv). If your data source is not a file, "
             "please download or export it to a file and try again, "
@@ -562,7 +563,8 @@ triple-backtick delimiter.
 async def _write_workflow(ctx: fastmcp.Context, convo: list[str]):
     """Write a Python function that performs a procedural workflow that includes
     "fuzzy" operations."""
-    logger = logging.getLogger(__name__)
+    await ctx.info("Writing workflow code...")
+
     convo = json.loads(json.dumps(convo))  # Deep-copy to ensure mutability.
 
     convo.append("""
@@ -626,11 +628,8 @@ and will copy-paste it into an execution environment.
 
             return pycode
         except Exception as e:
-            logger.warning(
-                "Attempt %d/%d failed while writing workflow code: %s",
-                attempt,
-                MAX_ATTEMPTS,
-                e,
+            await ctx.warning(
+                f"Attempt {attempt}/{MAX_ATTEMPTS} failed while writing workflow code: {e}"
             )
 
     raise ValueError(
@@ -642,7 +641,10 @@ and will copy-paste it into an execution environment.
 
 async def _is_ready_for_workflow(ctx: fastmcp.Context, convo: list[str]):
     """Sanity-checks to see if we have enough information to proceed with writing a workflow."""
-    logger = logging.getLogger(__name__)
+    await ctx.info(
+        "Confirming that we have adequate information to proceed with writing workflow..."
+    )
+
     convo = json.loads(json.dumps(convo))  # Deep-copy to ensure mutability.
 
     convo.append("""
@@ -725,7 +727,7 @@ async def _write_implementation_for_stub(
     logger = logging.getLogger(__name__)
     convo = json.loads(json.dumps(convo))  # Deep-copy to ensure mutability.
 
-    logger.info("Asking model to implement stub function %s", stubname)
+    logger.debug("Asking model to implement stub function %s", stubname)
 
     convo.append(f"""
 Oh shoot, I'm so sorry -- I hit the Back button by accident and deleted your entire response.
@@ -875,7 +877,9 @@ async def _replace_all_stubs_with_implementations(
     logger = logging.getLogger(__name__)
     convo = json.loads(json.dumps(convo))  # Deep-copy to ensure mutability.
 
-    logger.info("Looking for stub functions to implement in the generated code.")
+    await ctx.info(
+        "Wiring the workflow's non-procedural portions back into LLM calls..."
+    )
 
     # We marked these stub functions with a special syntax in the TODO comment,
     # so we can grep for them.
@@ -916,7 +920,7 @@ async def _execute_workflow_code(
 ) -> Any:
     """Execute the given workflow code and return the result."""
     logger = logging.getLogger(__name__)
-    logger.info("Executing workflow code.")
+    await ctx.info("Executing workflow.")
 
     namespace: dict[str, Any] = {
         "__name__": "ruc_generated_workflow",
@@ -1048,14 +1052,13 @@ async def ruc_execute_semantic_code_workflow(
     for data_source_uri in data_source_uris:
         try:
             data_source_records[data_source_uri] = await _load_data_from_uri(
-                ctx, data_source_uri
+                ctx,
+                data_source_uri,
             )
         except Exception as e:
             note = f"Failed to load data source {data_source_uri}: {e}"
             logger.warning(note)
             execution_notes += f"{note}\n\n"
-
-    logger.info("Data loading complete. Entering main workflow authorship.")
 
     data_previews = _construct_data_source_previews(data_source_records)
 
@@ -1134,10 +1137,6 @@ async def ruc_execute_semantic_code_workflow(
             or "(no notes recorded during execution)",
         }
 
-    logger.info(
-        "Model indicated it is ready to write workflow code. Proceeding to code generation."
-    )
-
     pycode = await _write_workflow(ctx, convo)
 
     logger.info(
@@ -1151,16 +1150,14 @@ async def ruc_execute_semantic_code_workflow(
     # of this POC is to demonstrate the code generation aspect of RUC. The production version of
     # this function will need to execute the generated code in a sandboxed environment and return
     # the actual results of that execution.
-    logger.info(f"Generated workflow code")
 
-    logger.info(f"Running workflow code now. This may take a moment...")
     # DEBUG: Save pycode to a local file, so we can inspect it if anything goes wrong during execution.
     with open("./logs/temp_auto_generated_workflow.py", "w", encoding="utf-8") as f:
         f.write(pycode)
 
     try:
         runresult = await _execute_workflow_code(ctx, pycode, data_source_records)
-        logger.info(f"Workflow execution complete.")
+        await ctx.info("Workflow execution complete.")
     except Exception as e:
         logger.error(f"Workflow execution failed: {e}", exc_info=True)
         return {
