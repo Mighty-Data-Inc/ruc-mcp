@@ -49,7 +49,7 @@ In today's work session, you'll write a Python function called `execute_workflow
 It will adhere to the following calling convention and structure:
 
 ```python
-async def execute_workflow(data_source_records: dict[str, list[Any]], ctx: fastmcp.Context, logger: logging.Logger) -> dict:
+async def execute_workflow(data_source_records: dict[str, list[Any]], ctx: fastmcp.Context) -> dict:
     # TODO: Implement the task here
     # ...
     return retval # "retval" is some JSON-serializable dict or list.
@@ -113,9 +113,14 @@ implementations shortly, so don't bypass or avoid these stub functions simply in
 writing code that works "for now". Treat the stub functions as though they actually do indeed
 work in the here and now.
 
-PRO TIP: Notice that the `execute_workflow` function takes a `logger` argument. Use this to report
-progress as the workflow is running. For long-running operations, it's nice to know that the
-system is still working and hasn't frozen or crashed.
+PRO TIP: As a courtesy to the end user, use the `ctx` object's logging and progress reporting
+methods! RUC is often called to perform long-running operations, so it's an important courtesy
+to the user to report things like the name of the current stage of the workflow or the current
+progress through the current stage. The FastMCP Context object, `ctx`, has standard logger
+methods to facilitate this: ctx.debug, ctx.info, ctx.warning, and ctx.error. In addition, 
+it also has a method called `ctx.report_progress(progress: float, total: float)`, which shows
+the user a very convenient progress bar. Use these tools often to keep the user informed
+about what's going on!
 """
 
 INJECT_RUC_LLM_CALL_FUNCTION = """
@@ -930,7 +935,6 @@ async def _execute_workflow_code(
     workflow_result = execute_workflow(
         data_source_records=data_source_records,
         ctx=ctx,
-        logger=logger,
     )
     result = (
         await cast(Any, workflow_result)
