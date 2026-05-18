@@ -157,6 +157,13 @@ async def ruc_submit_sample_request_to_llm(
     # does not support sampling with tools. We can handle this case gracefully or provide
     # a fallback mechanism.
     convo.append(
+        "Here is the structure that your final answer must conform to, expressed as a JSON schema. "
+        "Ensure that your final answer strictly adheres to this structure.\\n\\n"
+        "```json-schema\\n"
+        + json.dumps(result_type.model_json_schema(), indent=2)
+        + "\\n```"
+    )
+    convo.append(
         'Begin your reply with a fenced code block labeled "```json". '
         "Inside that block, provide a JSON object that matches the expected format."
     )
