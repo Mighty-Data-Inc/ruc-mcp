@@ -32,6 +32,9 @@ mcp: fastmcp.FastMCP = fastmcp.FastMCP(
         "but also contains LLM-shaped work such as classification, summarization, "
         "fuzzy matching, tone analysis, relevance judgment, or ambiguity resolution. "
         "\n\n"
+        "RUC is ideal for tasks where the semantic question is fuzzy, but the execution "
+        "must be exact."
+        "\n\n"
         "For example, if the user asks to review a collection of support tickets "
         "and count how many are angry, frustrated, neutral, or positive, do not try "
         "to keep the whole process in conversational memory. Use RUC to run a "
@@ -39,8 +42,13 @@ mcp: fastmcp.FastMCP = fastmcp.FastMCP(
         "while delegating only the tone classification step to an LLM-style semantic "
         "function."
         "\n\n"
-        "RUC is ideal for tasks where the semantic question is fuzzy, but the execution "
-        "must be exact."
+        "RUC also applies when the user wants the LLM to generate content repeatedly "
+        "at a specific scale. For example, 'write 20 horror stories in the style of "
+        "creepypasta' is a RUC task: the LLM concentrates on writing a story, and the "
+        "procedural code handles calling the LLM in a loop. This way, not only does "
+        "the LLM not need to worry about keeping count, but it also allows each LLM "
+        "invocation to focus solely on writing a single story, which is more likely "
+        "to yield high-quality output."
         "\n\n"
         'Note that tasks suitable to RUC might sometimes "sneak up" on you. That is, '
         "a user might ask for what seems like a straightforward LLM task, but once you "
@@ -66,7 +74,7 @@ You can import default packages like `json` or `csv`, but you don't have access 
 advanced tools like dataframes. Likewise, the __future__ library in your environment
 is extremely flakey and unreliable, and must be avoided (not that you should need it anyway).
 Also, it'll be running in a restricted VM, so you can't access the network or the filesystem
--- again, not that you should need such things for a data restructuring operation.
+-- again, not that you should need such things for a workflow of this kind.
 
 The one exception is that this environment *does* have a library called FastMCP installed,
 so you can `import fastmcp` and declare `ctx: fastmcp.Context` in your type signature.
